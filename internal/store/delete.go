@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fs/pkg/utils"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,11 +10,19 @@ import (
 )
 
 func DeleteFile(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("K")
+	if key != utils.Conf.API_KEY {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 	if id == "" {
 		http.Error(w, "missing file id", http.StatusBadRequest)
 		return
 	}
+
+	
 
 	path := filepath.Join(uploadDir, filepath.Base(id))
 	if err := os.Remove(path); err != nil {

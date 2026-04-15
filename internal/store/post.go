@@ -1,11 +1,15 @@
 package store
 
 import (
-	"encoding/json"
+	"fmt"
+	"fs/pkg/db"
+	"fs/pkg/utils"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const uploadDir = "./internal/uploads"
@@ -17,6 +21,12 @@ type fileResponse struct {
 }
 
 func AddFile(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("K")
+	if key != utils.Conf.API_KEY {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
@@ -39,8 +49,17 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	id := randomString(10)
 	filename := filepath.Base(fileHeader.Filename)
-	path := filepath.Join(uploadDir, filename)
+	path := filepath.Join(uploadDir, id)
+
+	err = db.AddFile(id, filename, time.Now().Add(time.Hour*24))
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		return
+	}
+
 	output, err := os.Create(path)
 	if err != nil {
 		http.Error(w, "failed to create file", http.StatusInternalServerError)
@@ -48,17 +67,23 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer output.Close()
 
-	size, err := io.Copy(output, file)
+	_, err = io.Copy(output, file)
 	if err != nil {
 		http.Error(w, "failed to save file", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/text")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(fileResponse{
-		Filename: filename,
-		Size:     size,
-		Path:     path,
-	})
+	w.Write([]byte(r.Host + "/" + id + "\n"))
+}
+
+func randomString(n int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	rand.NewSource(time.Now().UnixNano())
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
 }

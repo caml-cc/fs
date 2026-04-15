@@ -1,8 +1,10 @@
 package store
 
 import (
+	"fs/pkg/db"
+	"io"
 	"net/http"
-	"path/filepath"
+	"os"
 
 	"github.com/gorilla/mux"
 )
@@ -14,6 +16,18 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := filepath.Join(uploadDir, filepath.Base(id))
-	http.ServeFile(w, r, path)
+	filename, err := db.GetFilename(id)
+
+	f, err := os.Open("./internal/uploads/" + id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+
+	io.Copy(w, f)
 }

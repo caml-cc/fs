@@ -31,4 +31,6 @@ go.work.sum
 # .idea/
 # .vscode/
 
-*.gos
+*.db
+bin/
+internal/uploads/
