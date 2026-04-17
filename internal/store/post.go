@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -76,9 +77,14 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	u, err := url.Parse(r.URL.String())
+	if err != nil {
+		http.Error(w, "failed to get request hostname", http.StatusInternalServerError)
+	}
+
 	w.Header().Set("Content-Type", "application/text")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(r.Host + "/" + id + "\n"))
+	w.Write([]byte(u.Hostname() + "/" + id + "\n"))
 }
 
 func randomString(n int) string {
