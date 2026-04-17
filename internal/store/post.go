@@ -32,8 +32,11 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "request must include a multipart file named file", http.StatusBadRequest)
+	const maxUploadSize int64 = 15 << 30
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		http.Error(w, "request must include a multipart file named file (max 15GiB)", http.StatusBadRequest)
 		return
 	}
 
