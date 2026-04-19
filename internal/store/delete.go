@@ -1,6 +1,9 @@
 package store
 
 import (
+	"database/sql"
+	"errors"
+	"fs/pkg/db"
 	"fs/pkg/utils"
 	"net/http"
 	"os"
@@ -22,8 +25,6 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	
-
 	path := filepath.Join(uploadDir, filepath.Base(id))
 	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {
@@ -31,6 +32,11 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Error(w, "failed to delete file", http.StatusInternalServerError)
+		return
+	}
+
+	if err := db.DeleteFile(id); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "failed to delete file metadata", http.StatusInternalServerError)
 		return
 	}
 

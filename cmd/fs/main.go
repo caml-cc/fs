@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"fs/api"
 	"fs/internal/database"
+	"fs/internal/store"
 	"fs/pkg/utils"
 	"os"
+	"time"
 )
 
 func main() {
@@ -20,6 +22,8 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	store.StartExpiryCleanupWorker(time.Minute)
 
 	api.StartServer(utils.Conf)
 

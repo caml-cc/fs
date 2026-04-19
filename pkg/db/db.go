@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+type StoredFile struct {
+	ID string
+}
+
 func AddFile(id string, filename string, expirey time.Time) error {
 	_, err := database.DB.Exec("INSERT INTO FILES (id, filename, expires_at) VALUES ($1, $2, $3);", id, filename, expirey)
 	return err
@@ -37,4 +41,27 @@ func DeleteFile(id string) error {
 	}
 
 	return nil
+}
+
+func GetExpiredFiles(at time.Time) ([]StoredFile, error) {
+	rows, err := database.DB.Query("SELECT id FROM FILES WHERE expires_at <= ?;", at)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	expired := make([]StoredFile, 0)
+	for rows.Next() {
+		var file StoredFile
+		if err := rows.Scan(&file.ID); err != nil {
+			return nil, err
+		}
+		expired = append(expired, file)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return expired, nil
 }

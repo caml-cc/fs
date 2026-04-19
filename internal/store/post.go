@@ -5,6 +5,7 @@ import (
 	"fs/pkg/db"
 	"fs/pkg/utils"
 	"io"
+	"io/fs"
 	"math/rand"
 	"net/http"
 	"os"
@@ -52,11 +53,29 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	currentUsage, err := getDirSize(uploadDir)
+	if err != nil {
+		http.Error(w, "failed to inspect storage usage", http.StatusInternalServerError)
+		return
+	}
+
+	maxStorageBytes := int64(utils.Conf.MAX_STORAGE) << 30
+	if fileHeader.Size < 0 {
+		http.Error(w, "invalid file size", http.StatusBadRequest)
+		return
+	}
+
+	if currentUsage+fileHeader.Size > maxStorageBytes {
+		http.Error(w, "insufficient storage", http.StatusInsufficientStorage)
+		return
+	}
+
 	id := randomString(10)
 	filename := filepath.Base(fileHeader.Filename)
 	path := filepath.Join(uploadDir, id)
+	expiresAt := time.Now().Add(time.Duration(utils.Conf.KEEP) * time.Second)
 
-	err = db.AddFile(id, filename, time.Now().Add(time.Hour*24))
+	err = db.AddFile(id, filename, expiresAt)
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "failed to save file", http.StatusInternalServerError)
@@ -89,4 +108,29 @@ func randomString(n int) string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func getDirSize(root string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		total += info.Size()
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
 }
