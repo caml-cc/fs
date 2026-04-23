@@ -17,6 +17,7 @@ func StartServer(conf models.Config) {
 	server.HandleFunc("/", store.AddFile).Methods(http.MethodPost)
 	server.HandleFunc("/{id}", store.DeleteFile).Methods(http.MethodDelete)
 	server.HandleFunc("/{id}", store.GetFile).Methods(http.MethodGet)
+	server.HandleFunc("/", store.List).Methods("LIST")
 
 	fmt.Printf("Server running on port: %s", conf.PORT)
 	log.Fatal(http.ListenAndServe(":"+conf.PORT, server))

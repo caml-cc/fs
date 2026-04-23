@@ -48,6 +48,19 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	keep := r.FormValue("keep")
+	if keep != "" {
+		keepSeconds, err := time.ParseDuration(keep)
+		if err != nil {
+			http.Error(w, "invalid keep value", http.StatusBadRequest)
+			return
+		}
+		if keepSeconds <= 0 {
+			http.Error(w, "keep must be a positive integer", http.StatusBadRequest)
+			return
+		}
+	}
+
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		http.Error(w, "failed to prepare upload directory", http.StatusInternalServerError)
 		return
@@ -73,13 +86,21 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 	id := randomString(10)
 	filename := filepath.Base(fileHeader.Filename)
 	path := filepath.Join(uploadDir, id)
-	expiresAt := time.Now().Add(time.Duration(utils.Conf.KEEP) * time.Second)
-
-	err = db.AddFile(id, filename, expiresAt)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w, "failed to save file", http.StatusInternalServerError)
-		return
+	keepSeconds, _ := time.ParseDuration(r.FormValue("keep"))
+	if keep == "" {
+		err = db.AddFile(id, filename, time.Now().Add(time.Duration(utils.Conf.KEEP)*time.Second))
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "failed to save file", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		err = db.AddFile(id, filename, time.Now().Add(keepSeconds))
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "failed to save file", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	output, err := os.Create(path)
