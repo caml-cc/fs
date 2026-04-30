@@ -26,6 +26,6 @@ func List(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(200)
 	for _, file := range files {
-		fmt.Fprintf(w, "%s | %s\n", file.ID, file.Filename)
+		fmt.Fprintf(w, "%s | %s | %s\n", file.ID, file.Filename, file.Expires_At.Format("2006-01-02 15:04:05"))
 	}
 }

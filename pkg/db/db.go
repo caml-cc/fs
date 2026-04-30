@@ -7,8 +7,9 @@ import (
 )
 
 type StoredFile struct {
-	ID       string
-	Filename string
+	ID         string
+	Filename   string
+	Expires_At time.Time
 }
 
 func AddFile(id string, filename string, expirey time.Time) error {
@@ -68,7 +69,7 @@ func GetExpiredFiles(at time.Time) ([]StoredFile, error) {
 }
 
 func ListFiles() ([]StoredFile, error) {
-	rows, err := database.DB.Query("SELECT id, filename FROM FILES;")
+	rows, err := database.DB.Query("SELECT id, filename, expires_at FROM FILES;")
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ func ListFiles() ([]StoredFile, error) {
 	files := make([]StoredFile, 0)
 	for rows.Next() {
 		var file StoredFile
-		if err := rows.Scan(&file.ID, &file.Filename); err != nil {
+		if err := rows.Scan(&file.ID, &file.Filename, &file.Expires_At); err != nil {
 			return nil, err
 		}
 		files = append(files, file)
