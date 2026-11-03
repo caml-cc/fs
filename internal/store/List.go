@@ -22,10 +22,15 @@ func List(w http.ResponseWriter, r *http.Request) {
 	files, err := db.ListFiles()
 	if err != nil {
 		http.Error(w, "unable to list files", http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(200)
 	for _, file := range files {
-		fmt.Fprintf(w, "%s | %s | %s\n", file.ID, file.Filename, file.Expires_At.Format("2006-01-02 15:04:05"))
+		status := ""
+		if !file.Complete {
+			status = " | incomplete"
+		}
+		fmt.Fprintf(w, "%s | %s | %s%s\n", file.ID, file.Filename, file.Expires_At.Format("2006-01-02 15:04:05"), status)
 	}
 }

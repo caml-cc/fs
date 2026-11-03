@@ -27,10 +27,24 @@ func LoadConfig() error {
 		return err
 	}
 
+	// MAX_UPLOAD is the largest single request body (in GB, decimals allowed) the
+	// server accepts. Larger files must be uploaded in fragments. Defaults to 1.
+	maxUploadGB := 1.0
+	if raw := os.Getenv("MAX_UPLOAD"); raw != "" {
+		maxUploadGB, err = strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return errors.New("MAX_UPLOAD must be a number (GB)")
+		}
+	}
+	if maxUploadGB <= 0 {
+		return errors.New("MAX_UPLOAD must be greater than 0")
+	}
+
 	Conf = models.Config{
 		PORT:        os.Getenv("PORT"),
 		API_KEY:     os.Getenv("API_KEY"),
 		MAX_STORAGE: maxStorageInt,
+		MAX_UPLOAD:  int64(maxUploadGB * (1 << 30)),
 		KEEP:        keepInt,
 		UPLOAD_DIR:  os.Getenv("UPLOAD_DIR"),
 	}

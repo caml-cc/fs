@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"fs/pkg/db"
 	"fs/pkg/utils"
@@ -12,6 +13,10 @@ import (
 	"path/filepath"
 	"time"
 )
+
+// multipartOverhead is the slack allowed on top of MAX_UPLOAD for multipart
+// boundaries, headers and small form fields such as "keep".
+const multipartOverhead int64 = 1 << 20
 
 func AddFile(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("K")
@@ -25,13 +30,29 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const maxUploadSize int64 = 15 << 30
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+	maxUpload := utils.Conf.MAX_UPLOAD
 
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
-		http.Error(w, "request must include a multipart file named file (max 15GiB)", http.StatusBadRequest)
+	// Reject oversized uploads before reading any of the body. Because the body
+	// is never read, Go does not send "100 Continue", so clients like curl stop
+	// before transmitting the file.
+	if r.ContentLength > maxUpload+multipartOverhead {
+		uploadTooLarge(w)
 		return
 	}
+
+	// Covers chunked / unknown-length bodies.
+	r.Body = http.MaxBytesReader(w, r.Body, maxUpload+multipartOverhead)
+
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			uploadTooLarge(w)
+			return
+		}
+		http.Error(w, "request must include a multipart file named file", http.StatusBadRequest)
+		return
+	}
+	defer r.MultipartForm.RemoveAll()
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
@@ -40,17 +61,20 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	keep := r.FormValue("keep")
-	if keep != "" {
-		keepSeconds, err := time.ParseDuration(keep)
-		if err != nil {
-			http.Error(w, "invalid keep value", http.StatusBadRequest)
-			return
-		}
-		if keepSeconds <= 0 {
-			http.Error(w, "keep must be a positive integer", http.StatusBadRequest)
-			return
-		}
+	if fileHeader.Size < 0 {
+		http.Error(w, "invalid file size", http.StatusBadRequest)
+		return
+	}
+
+	if fileHeader.Size > maxUpload {
+		uploadTooLarge(w)
+		return
+	}
+
+	expiry, err := resolveExpiry(r.FormValue("keep"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	uploadDir := utils.Conf.UPLOAD_DIR
@@ -59,19 +83,10 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUsage, err := getDirSize(uploadDir)
-	if err != nil {
+	if ok, err := hasStorageFor(fileHeader.Size); err != nil {
 		http.Error(w, "failed to inspect storage usage", http.StatusInternalServerError)
 		return
-	}
-
-	maxStorageBytes := int64(utils.Conf.MAX_STORAGE) << 30
-	if fileHeader.Size < 0 {
-		http.Error(w, "invalid file size", http.StatusBadRequest)
-		return
-	}
-
-	if currentUsage+fileHeader.Size > maxStorageBytes {
+	} else if !ok {
 		http.Error(w, "insufficient storage", http.StatusInsufficientStorage)
 		return
 	}
@@ -79,21 +94,13 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 	id := randomString(10)
 	filename := filepath.Base(fileHeader.Filename)
 	path := filepath.Join(uploadDir, id)
-	keepSeconds, _ := time.ParseDuration(r.FormValue("keep"))
-	if keep == "" {
-		err = db.AddFile(id, filename, time.Now().Add(time.Duration(utils.Conf.KEEP)*time.Second))
-		if err != nil {
-			fmt.Println(err)
-			http.Error(w, "failed to save file", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		err = db.AddFile(id, filename, time.Now().Add(keepSeconds))
-		if err != nil {
-			fmt.Println(err)
-			http.Error(w, "failed to save file", http.StatusInternalServerError)
-			return
-		}
+	isDir := r.FormValue("dir") == "1"
+
+	err = db.AddFile(id, filename, expiry, fileHeader.Size, true, isDir)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		return
 	}
 
 	output, err := os.Create(path)
@@ -112,6 +119,55 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/text")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(r.Host + "/" + id + "\n"))
+}
+
+func uploadTooLarge(w http.ResponseWriter) {
+	msg := fmt.Sprintf(
+		"file exceeds the max upload size of %s; use cc-store to upload larger files in fragments",
+		formatBytes(utils.Conf.MAX_UPLOAD),
+	)
+	http.Error(w, msg, http.StatusRequestEntityTooLarge)
+}
+
+// resolveExpiry turns an optional Go duration string (e.g. "100h") into an
+// expiry time, falling back to the configured KEEP period.
+func resolveExpiry(keep string) (time.Time, error) {
+	if keep == "" {
+		return time.Now().Add(time.Duration(utils.Conf.KEEP) * time.Second), nil
+	}
+
+	keepDuration, err := time.ParseDuration(keep)
+	if err != nil {
+		return time.Time{}, errors.New("invalid keep value")
+	}
+	if keepDuration <= 0 {
+		return time.Time{}, errors.New("keep must be a positive duration")
+	}
+
+	return time.Now().Add(keepDuration), nil
+}
+
+func hasStorageFor(size int64) (bool, error) {
+	currentUsage, err := getDirSize(utils.Conf.UPLOAD_DIR)
+	if err != nil {
+		return false, err
+	}
+
+	maxStorageBytes := int64(utils.Conf.MAX_STORAGE) << 30
+	return currentUsage+size <= maxStorageBytes, nil
+}
+
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.2f GiB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.2f MiB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.2f KiB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 func randomString(n int) string {

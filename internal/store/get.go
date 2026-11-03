@@ -3,7 +3,6 @@ package store
 import (
 	"fs/pkg/db"
 	"fs/pkg/utils"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,7 +17,11 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename, err := db.GetFilename(id)
+	stored, err := db.GetFile(id)
+	if err != nil || !stored.Complete {
+		http.NotFound(w, r)
+		return
+	}
 
 	f, err := os.Open(filepath.Join(utils.Conf.UPLOAD_DIR, filepath.Base(id)))
 	if err != nil {
@@ -27,9 +30,17 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
+	info, err := f.Stat()
+	if err != nil {
+		http.Error(w, "failed to read file", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename="+stored.Filename)
+	if stored.IsDir {
+		w.Header().Set("X-Folder", "1")
+	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-
-	io.Copy(w, f)
+	http.ServeContent(w, r, stored.Filename, info.ModTime(), f)
 }

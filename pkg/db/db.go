@@ -10,21 +10,34 @@ type StoredFile struct {
 	ID         string
 	Filename   string
 	Expires_At time.Time
+	Size       int64
+	Complete   bool
+	IsDir      bool
 }
 
-func AddFile(id string, filename string, expirey time.Time) error {
-	_, err := database.DB.Exec("INSERT INTO FILES (id, filename, expires_at) VALUES ($1, $2, $3);", id, filename, expirey)
+func AddFile(id string, filename string, expirey time.Time, size int64, complete bool, isDir bool) error {
+	_, err := database.DB.Exec(
+		"INSERT INTO FILES (id, filename, expires_at, size, complete, is_dir) VALUES (?, ?, ?, ?, ?, ?);",
+		id, filename, expirey, size, complete, isDir,
+	)
 	return err
 }
 
-func GetFilename(id string) (string, error) {
-	var filename string
-	err := database.DB.QueryRow("SELECT filename FROM FILES WHERE id = ?;", id).Scan(&filename)
+func GetFile(id string) (StoredFile, error) {
+	var file StoredFile
+	err := database.DB.QueryRow(
+		"SELECT id, filename, expires_at, size, complete, is_dir FROM FILES WHERE id = ?;", id,
+	).Scan(&file.ID, &file.Filename, &file.Expires_At, &file.Size, &file.Complete, &file.IsDir)
 	if err != nil {
-		return "", err
+		return StoredFile{}, err
 	}
 
-	return filename, nil
+	return file, nil
+}
+
+func MarkComplete(id string) error {
+	_, err := database.DB.Exec("UPDATE FILES SET complete = 1 WHERE id = ?;", id)
+	return err
 }
 
 func DeleteFile(id string) error {
@@ -69,7 +82,7 @@ func GetExpiredFiles(at time.Time) ([]StoredFile, error) {
 }
 
 func ListFiles() ([]StoredFile, error) {
-	rows, err := database.DB.Query("SELECT id, filename, expires_at FROM FILES;")
+	rows, err := database.DB.Query("SELECT id, filename, expires_at, complete FROM FILES;")
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +91,7 @@ func ListFiles() ([]StoredFile, error) {
 	files := make([]StoredFile, 0)
 	for rows.Next() {
 		var file StoredFile
-		if err := rows.Scan(&file.ID, &file.Filename, &file.Expires_At); err != nil {
+		if err := rows.Scan(&file.ID, &file.Filename, &file.Expires_At, &file.Complete); err != nil {
 			return nil, err
 		}
 		files = append(files, file)
