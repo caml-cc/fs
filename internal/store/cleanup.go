@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fs/pkg/db"
+	"fs/pkg/utils"
 	"log"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ func CleanupExpiredFiles() (int, error) {
 
 	deleted := 0
 	for _, file := range expired {
-		path := filepath.Join(uploadDir, filepath.Base(file.ID))
+		path := filepath.Join(utils.Conf.UPLOAD_DIR, filepath.Base(file.ID))
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			log.Printf("cleanup failed to delete file %s: %v", file.ID, err)
 			continue

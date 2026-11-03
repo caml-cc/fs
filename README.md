@@ -41,6 +41,7 @@ You can copy from [ .env.example ](.env.example) and update values.
 Notes:
 - PORT is required.
 - API_KEY is required and used in request header K for protected routes.
+- UPLOAD_DIR is optional and sets where uploaded files are stored (defaults to internal/uploads).
 
 Config loading is implemented in config.go.
 
@@ -52,7 +53,7 @@ Start the server:
 go run ./cmd/fs/main.go
 ~~~
 
-Default upload directory:
+Default upload directory (override with UPLOAD_DIR):
 - internal/uploads
 
 Database:

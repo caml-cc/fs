@@ -5,4 +5,5 @@ type Config struct {
 	API_KEY     string
 	MAX_STORAGE int
 	KEEP        int
+	UPLOAD_DIR  string
 }

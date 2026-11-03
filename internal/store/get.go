@@ -2,9 +2,11 @@ package store
 
 import (
 	"fs/pkg/db"
+	"fs/pkg/utils"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/gorilla/mux"
 )
@@ -18,7 +20,7 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 
 	filename, err := db.GetFilename(id)
 
-	f, err := os.Open("./internal/uploads/" + id)
+	f, err := os.Open(filepath.Join(utils.Conf.UPLOAD_DIR, filepath.Base(id)))
 	if err != nil {
 		http.NotFound(w, r)
 		return

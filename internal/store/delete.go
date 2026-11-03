@@ -25,7 +25,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := filepath.Join(uploadDir, filepath.Base(id))
+	path := filepath.Join(utils.Conf.UPLOAD_DIR, filepath.Base(id))
 	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)

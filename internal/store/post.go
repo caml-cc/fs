@@ -13,14 +13,6 @@ import (
 	"time"
 )
 
-const uploadDir = "./internal/uploads"
-
-type fileResponse struct {
-	Filename string `json:"filename"`
-	Size     int64  `json:"size"`
-	Path     string `json:"path"`
-}
-
 func AddFile(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get("K")
 	if key != utils.Conf.API_KEY {
@@ -61,6 +53,7 @@ func AddFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	uploadDir := utils.Conf.UPLOAD_DIR
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		http.Error(w, "failed to prepare upload directory", http.StatusInternalServerError)
 		return

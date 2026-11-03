@@ -32,6 +32,11 @@ func LoadConfig() error {
 		API_KEY:     os.Getenv("API_KEY"),
 		MAX_STORAGE: maxStorageInt,
 		KEEP:        keepInt,
+		UPLOAD_DIR:  os.Getenv("UPLOAD_DIR"),
+	}
+
+	if Conf.UPLOAD_DIR == "" {
+		Conf.UPLOAD_DIR = "./internal/uploads"
 	}
 
 	if Conf.API_KEY == "" || Conf.PORT == "" || Conf.MAX_STORAGE <= 0 || Conf.KEEP <= 0 {
